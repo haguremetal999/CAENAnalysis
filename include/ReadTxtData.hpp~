@@ -1,0 +1,8 @@
+#include
+#include <ifstream>
+
+void ReadTxtData() {
+  
+  std::cout << "test" << std::endl;
+  
+}
