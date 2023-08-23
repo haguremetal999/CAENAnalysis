@@ -7,3 +7,8 @@ add_executable(Data_Decoade data_decode.cpp)
 target_link_libraries(Data_Decoade  decodeLibs)
 target_include_directories(Data_Decoade PRIVATE ${ROOT_INCLUDE_DIRS})
 target_link_libraries(Data_Decoade ${ROOT_LIBRARIES})
+
+add_executable(Raw_Analysis raw_analysis.cpp)
+target_link_libraries(Raw_Analysis  decodeLibs)
+target_include_directories(Raw_Analysis PRIVATE ${ROOT_INCLUDE_DIRS})
+target_link_libraries(Raw_Analysis ${ROOT_LIBRARIES})

@@ -14,6 +14,7 @@ add_library(
   decodeLibs
   SHARED
   ReadTxtData.cpp
+  RawAnalysis.cpp
   )
 
 target_include_directories(

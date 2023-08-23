@@ -21,7 +21,7 @@
 #include "TStyle.h"
 #include "TTree.h"
 
-void ReadTxtData(std::string filePath, int fileSize ) {  
+void RawAnalysis(std::string filePath, int fileSize ) {  
   
   std::cout << "Read text data! : " << filePath << std::endl;
 
@@ -42,22 +42,15 @@ void ReadTxtData(std::string filePath, int fileSize ) {
   unsigned long int clockTimeGlobal = 0;
   unsigned long int clockTimePrev = 0;
   unsigned long int clockTimeMax = 10000;  
-  int channel = 0;  
-  std::vector<int> pulse;
+  int channel = 0;
   
-  // // ------------------------------------------------------- ouitput Ntuple
-  std::string ofName = filePath.erase ( 0, filePath.rfind ( "/" )+1 );
-  ofName.erase ( ofName.find ( ".xml" ) );
-  ofName = "./data/" + ofName + ".root";
-  TString T_ofName = ofName;
-  std::cout << std::endl << T_ofName << std::endl << std::endl;
-  TFile *fout = new TFile( T_ofName , "RECREATE" );
-  TTree *tree = new TTree( "tree", "" );
-  tree -> Branch ( "eventID", &eventID );
-  tree -> Branch ( "timeStamp", &timeStamp );
-  tree -> Branch ( "clockTime", &clockTime );
-  tree -> Branch ( "pulse", &pulse );
-
+  int grNum = 100;
+  int grCnt = 0;
+  TGraph * checkGr [grNum];
+  TGraph * pedestalGr = new TGraph ( );
+  TH1D * pedeH1D = new TH1D ( "pedeH1D","", 40, 3680, 3720 );
+  TH2D * pedeH2D = new TH2D ( "pedeH2D","", 10000, 0, fileSize, 40, 3680, 3720 );
+  
   while ( getline ( ifs, line ) )
     {
       // --------------------------------------------------- file size cut
@@ -144,21 +137,82 @@ void ReadTxtData(std::string filePath, int fileSize ) {
 	  int pedestalAve = 0;
 	  for ( int ii=0; ii<data.size (); ii++ ) {
 	    // std::cout << ii << ", " << data[ii] << std::endl;
+	    if ( ii<150 ){
+	      pedestalAve += data[ii];
+	      pedeH1D -> Fill ( data [ii] );
+	      pedeH2D -> Fill ( eventID, data [ii] );	      
+	      }
 	  }
-	  pulse = data;
-	  tree -> Fill ();
+	  pedestalAve /= 150;
+	  int pedeCnt = 0;
+	  float sigma = 1.375;
+	  float pedestalAve2 = 0;
+	  for ( int ii=0; ii<data.size (); ii++ ) {
+	    // std::cout << ii << ", " << data[ii] << std::endl;
+	    if ( ii<150 ){
+	      if ( abs(data[ii]-pedestalAve) < 3*sigma ) {
+		pedestalAve2 += data[ii];
+		pedeCnt ++;
+	      }
+	    }
+	  }
+	  pedestalAve2 /= pedeCnt;
+	  int nPt = pedestalGr -> GetN ();
+	  // std::cout << eventID << ", " << pedestalAve << std::endl;
+	  pedestalGr -> SetPoint ( nPt, eventID, pedestalAve );
+	  
+	  // ------------------------------------ graph check
+	  if (grCnt < grNum ){
+	    checkGr [grCnt] = new TGraph ();
+	    for ( int ii=0; ii<data.size (); ii++ ) {
+	      // std::cout << ii << ", " << data[ii] << std::endl;
+	      nPt = checkGr [grCnt] -> GetN ();
+	      checkGr [grCnt] -> SetPoint ( nPt, ii, data[ii] );
+	    }
+	    grCnt ++;
+	  }
 	    
 	  headerFlag = false;
 	  dataFlag = false;
-	  pulse.clear ();
 	}
       }      
       lineCnt ++;    
     }
   
-  tree -> Write ();
-  fout -> Close();
+  TCanvas *c = new TCanvas ( "c", "", 1000, 600 );
+  gStyle -> SetOptStat ( 0 );
+  TH2D *frame = new TH2D ( "frame", "", 1, 0, 1024, 1, 2500, 3750 );
+  frame -> SetXTitle ( "time [point]" );
+  frame -> SetYTitle ( "ADC [counts]" );
+  frame -> Draw ();  
+  for ( int ii=0; ii<grNum; ii++ ) {
+    checkGr[ii] -> Draw ("L Same");
+  }
+  c -> Print ( "./imgs/test.png" );
+
+  TCanvas *c2 = new TCanvas ( "c2", "", 1000, 600 );
+  TH2D *frame2 = new TH2D ( "frame2", "", 1, 0, fileSize, 1, 3680, 3720 );
+  frame2 -> SetXTitle ( "event ID" );
+  frame2 -> SetYTitle ( "pedestal average [counts]" );
+  frame2 -> Draw ();  
+  pedestalGr -> Draw ("L Same");
+  c2 -> Print ( "./imgs/pedestal.png" );
   
+  TCanvas *c3 = new TCanvas ( "c3", "", 1000, 600 );
+  gStyle -> SetOptFit (1111);
+  pedeH1D -> SetXTitle ( "pedestal [counts]" );
+  pedeH1D -> SetYTitle ( "events" );
+  pedeH1D -> Fit ( "gaus" );
+  pedeH1D -> Draw ();
+  c3 -> Print ( "./imgs/pedeH1D.png" );
+
+  TCanvas *c4 = new TCanvas ( "c4", "", 1000, 600 );
+  gStyle -> SetOptFit (1111);
+  pedeH2D -> SetXTitle ( "eventID" );
+  pedeH2D -> SetYTitle ( "pedestal [counts]" );
+  pedeH2D -> Draw ( "COLZ" );
+  c4 -> Print ( "./imgs/pedeH2D.png" );
+
   std::cout << std::endl << " ====================================================================== done!" << std::endl << std::endl;
   
 }
