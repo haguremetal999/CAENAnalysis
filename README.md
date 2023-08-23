@@ -9,12 +9,11 @@ and
 ```
 source CAENAnalysis/setup.sh
 ```
-then, directories ( `imgs`, `data`, `scripts` ) are made in current directory, and run scripts are made in `./scripts`.
+then, directories ( `imgs`, `data`, `scripts` and `build` ) are made in current directory, and run scripts are made in `./scripts`.
 
 ## build and run project
-Make `build` directory and source script for cmake.
+Source script for cmake and build project in `./build`.
 ```
-mkdir build
 source scripts/CMakeMake.sh
 ```
 then, write data file path to `scrpts/Decode.sh`, and you can run project with 
