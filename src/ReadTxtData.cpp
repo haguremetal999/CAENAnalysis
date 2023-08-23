@@ -43,12 +43,13 @@ void ReadTxtData(std::string filePath, int fileSize ) {
   unsigned long int clockTimePrev = 0;
   unsigned long int clockTimeMax = 10000;  
   int channel = 0;
-
   
   int grNum = 100;
   int grCnt = 0;
-  TGraph *checkGr [grNum];
+  TGraph * checkGr [grNum];
   TGraph * pedestalGr = new TGraph ( );
+  TH1D * pedeH1D = new TH1D ( "pedeH1D","", 40, 3680, 3720 );
+  TH2D * pedeH2D = new TH2D ( "pedeH2D","", 10000, 0, fileSize, 40, 3680, 3720 );
   std::vector<int> pulse;
   
   // // ------------------------------------------------------- ouitput Ntuple
@@ -75,7 +76,8 @@ void ReadTxtData(std::string filePath, int fileSize ) {
       int counter = 0;
       if ( line.find ( "<event" ) != std::string::npos ){
 	headerFlag = true;
-      	if ( dataCnt%(lineSize/10)==0 ) std::cout << "================================== Header : " << dataCnt << std::endl;
+	float process =  float ( dataCnt ) / float ( lineSize );
+      	if ( dataCnt%(lineSize/100)==0 ) std::cout << "================================== Header : " << dataCnt << " | " << process*100 << "% processed." << std::endl;
   	while ( getline ( i_stream, str_buf, ' ' ) ) {
 	  // std::cout << "   L str = " << str_buf << " | " << counter  << std::endl;
 	  int index = str_buf.find ( "=" );
@@ -149,9 +151,26 @@ void ReadTxtData(std::string filePath, int fileSize ) {
 	  int pedestalAve = 0;
 	  for ( int ii=0; ii<data.size (); ii++ ) {
 	    // std::cout << ii << ", " << data[ii] << std::endl;
-	    if ( ii<150 ) pedestalAve += data[ii];
+	    if ( ii<150 ){
+	      pedestalAve += data[ii];
+	      pedeH1D -> Fill ( data [ii] );
+	      pedeH2D -> Fill ( eventID, data [ii] );	      
+	      }
 	  }
 	  pedestalAve /= 150;
+	  int pedeCnt = 0;
+	  float sigma = 1.375;
+	  float pedestalAve2 = 0;
+	  for ( int ii=0; ii<data.size (); ii++ ) {
+	    // std::cout << ii << ", " << data[ii] << std::endl;
+	    if ( ii<150 ){
+	      if ( abs(data[ii]-pedestalAve) < 3*sigma ) {
+		pedestalAve2 += data[ii];
+		pedeCnt ++;
+	      }
+	    }
+	  }
+	  pedestalAve2 /= pedeCnt;
 	  int nPt = pedestalGr -> GetN ();
 	  // std::cout << eventID << ", " << pedestalAve << std::endl;
 	  pedestalGr -> SetPoint ( nPt, eventID, pedestalAve );
@@ -175,7 +194,6 @@ void ReadTxtData(std::string filePath, int fileSize ) {
 	}
       }      
       lineCnt ++;    
-
     }
   
   tree -> Write ();
@@ -185,7 +203,7 @@ void ReadTxtData(std::string filePath, int fileSize ) {
   gStyle -> SetOptStat ( 0 );
   TH2D *frame = new TH2D ( "frame", "", 1, 0, 1024, 1, 2500, 3750 );
   frame -> SetXTitle ( "time [point]" );
-  frame -> SetYTitle ( "ADC [V]" );
+  frame -> SetYTitle ( "ADC [counts]" );
   frame -> Draw ();  
   for ( int ii=0; ii<grNum; ii++ ) {
     checkGr[ii] -> Draw ("L Same");
@@ -193,12 +211,27 @@ void ReadTxtData(std::string filePath, int fileSize ) {
   c -> Print ( "./imgs/test.png" );
 
   TCanvas *c2 = new TCanvas ( "c2", "", 1000, 600 );
-  TH2D *frame2 = new TH2D ( "frame2", "", 1, 0, 500000, 1, 3680, 3720 );
+  TH2D *frame2 = new TH2D ( "frame2", "", 1, 0, fileSize, 1, 3680, 3720 );
   frame2 -> SetXTitle ( "event ID" );
-  frame2 -> SetYTitle ( "pedestal average [V]" );
+  frame2 -> SetYTitle ( "pedestal average [counts]" );
   frame2 -> Draw ();  
   pedestalGr -> Draw ("L Same");
   c2 -> Print ( "./imgs/pedestal.png" );
+  
+  TCanvas *c3 = new TCanvas ( "c3", "", 1000, 600 );
+  gStyle -> SetOptFit (1111);
+  pedeH1D -> SetXTitle ( "pedestal [counts]" );
+  pedeH1D -> SetYTitle ( "events" );
+  pedeH1D -> Fit ( "gaus" );
+  pedeH1D -> Draw ();
+  c3 -> Print ( "./imgs/pedeH1D.png" );
+
+  TCanvas *c4 = new TCanvas ( "c4", "", 1000, 600 );
+  gStyle -> SetOptFit (1111);
+  pedeH2D -> SetXTitle ( "eventID" );
+  pedeH2D -> SetYTitle ( "pedestal [counts]" );
+  pedeH2D -> Draw ( "COLZ" );
+  c4 -> Print ( "./imgs/pedeH2D.png" );
 
   std::cout << std::endl << " ====================================================================== done!" << std::endl << std::endl;
   
