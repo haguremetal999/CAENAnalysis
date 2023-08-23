@@ -7,11 +7,13 @@
 #include <vector>
 
 #include "TApplication.h"
+#include "TCanvas.h"
 #include "TAxis.h"
 #include "TF1.h"
 #include "TFile.h"
 #include "TGraph.h"
 #include "TH1D.h"
+#include "TH2D.h"
 #include "TLine.h"
 #include "TMath.h"
 #include "TRandom.h"
@@ -198,4 +200,6 @@ void ReadTxtData(std::string filePath, int fileSize ) {
   pedestalGr -> Draw ("L Same");
   c2 -> Print ( "./imgs/pedestal.png" );
 
+  std::cout << std::endl << " ====================================================================== done!" << std::endl << std::endl;
+  
 }
