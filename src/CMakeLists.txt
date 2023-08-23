@@ -7,7 +7,7 @@ add_library(
 
 target_include_directories(
   greetings
-  PUBLIC home/kotarotakahashi/share_windows/hsuzuki/src/CAEN_inTsukuba_20230821/include
+  PRIVATE ../include
   )
 
 add_library(
@@ -18,5 +18,5 @@ add_library(
 
 target_include_directories(
   decodeLibs
-  PUBLIC home/kotarotakahashi/share_windows/hsuzuki/src/CAEN_inTsukuba_20230821/include
+  PRIVATE ../include
   )
