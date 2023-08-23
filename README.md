@@ -9,7 +9,7 @@ and
 ```
 source CAENAnalysis/setup.sh
 ```
-then, directories ( "imgs", "data", "scripts" ) are made in current directory, and run scripts are made in "./scripts" directory.
+then, directories ( "imgs", "data", "scripts" ) are made in current directory, and run scripts are made in "./scripts".
 
 ## build and run project
 Make "build" directory and source script for cmake.
