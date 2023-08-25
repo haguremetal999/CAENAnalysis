@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <thread>
 
 #include "TApplication.h"
 #include "TCanvas.h"
@@ -20,10 +21,11 @@
 #include "TROOT.h"
 #include "TStyle.h"
 #include "TTree.h"
+#include "TProfile.h"
 
 void RawAnalysis(std::string filePath, int fileSize ) {  
   
-  std::cout << "Read text data! : " << filePath << std::endl;
+  std::cout << "data : " << filePath << std::endl;
 
   std::ifstream ifs ( filePath );
   std::string line, str_buf;
@@ -45,11 +47,16 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   int channel = 0;
   
   int grNum = 100;
+  if ( grNum > fileSize ) grNum = fileSize;
   int grCnt = 0;
   TGraph * checkGr [grNum];
-  TGraph * pedestalGr = new TGraph ( );
+  TGraph * pedestalGr = new TGraph ();
   TH1D * pedeH1D = new TH1D ( "pedeH1D","", 40, 3680, 3720 );
   TH2D * pedeH2D = new TH2D ( "pedeH2D","", 10000, 0, fileSize, 40, 3680, 3720 );
+  TH2D * EnergyRatioH2D = new TH2D ( "EnergyRatioH2D","", 1000, 0, 60, 100, 0, 1 );
+  TH2D * EventIDRatioH2D = new TH2D ( "EventIDRatioH2D","", 1000, 0, fileSize, 100, 0, 1 );
+  TH2D * EventIDADCTotalH2D = new TH2D ( "EventIDADCTotalH2D","", 1000, 0, fileSize, 200, 0, 1 );
+  
   
   while ( getline ( ifs, line ) )
     {
@@ -63,8 +70,8 @@ void RawAnalysis(std::string filePath, int fileSize ) {
       if ( line.find ( "<event" ) != std::string::npos ){
 	headerFlag = true;
 	float process =  float ( dataCnt ) / float ( lineSize );
-      	if ( dataCnt%(lineSize/100)==0 ) std::cout << "================================== Header : " << dataCnt << " | " << process*100 << "% processed." << std::endl;
-  	while ( getline ( i_stream, str_buf, ' ' ) ) {
+	if ( lineSize > 100 ){ if ( dataCnt%(lineSize/100)==0 ) std::cout << "================================== Header : " << dataCnt << " | " << process*100 << "% processed." << std::endl; }
+  	while ( getline ( i_stream, str_buf, ' ' ) ) {	  
 	  // std::cout << "   L str = " << str_buf << " | " << counter  << std::endl;
 	  int index = str_buf.find ( "=" );
 	  if ( index > 0 ) {
@@ -94,11 +101,12 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	    }
 	  }
   	  counter ++ ;
+	  
 	}
 	dataCnt ++;	
 	continue;
       }
-
+      
       counter = 0;
       std::vector<int> data;
       // // --------------------------------------------------- data
@@ -133,10 +141,11 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	    counter ++;
 	  }
 
-	  // ------------------------------------ data check
+	  // -------------------------------------------------------------------- data check
 	  int pedestalAve = 0;
 	  for ( int ii=0; ii<data.size (); ii++ ) {
 	    // std::cout << ii << ", " << data[ii] << std::endl;
+	    // ------------------------------------ pedestal average (1)
 	    if ( ii<150 ){
 	      pedestalAve += data[ii];
 	      pedeH1D -> Fill ( data [ii] );
@@ -147,27 +156,61 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  int pedeCnt = 0;
 	  float sigma = 1.375;
 	  float pedestalAve2 = 0;
+	  std::vector<int> cor_data;
 	  for ( int ii=0; ii<data.size (); ii++ ) {
 	    // std::cout << ii << ", " << data[ii] << std::endl;
+	    // ------------------------------------ pedestal average (2)
 	    if ( ii<150 ){
-	      if ( abs(data[ii]-pedestalAve) < 3*sigma ) {
+	      if ( abs(data[ii]-pedestalAve) < 5*sigma ) {
 		pedestalAve2 += data[ii];
 		pedeCnt ++;
 	      }
 	    }
+	    cor_data.push_back ( -1 *( data[ii] - pedestalAve ) );    
 	  }
 	  pedestalAve2 /= pedeCnt;
 	  int nPt = pedestalGr -> GetN ();
 	  // std::cout << eventID << ", " << pedestalAve << std::endl;
-	  pedestalGr -> SetPoint ( nPt, eventID, pedestalAve );
-	  
+	  pedestalGr -> SetPoint ( nPt, eventID, pedestalAve2 );
+
+	  int ADCTotal = 0;
+	  int ADCTotalFast = 0;
+	  float Ratio;
+	  int IntegEnd = cor_data.size ();
+	  IntegEnd = 550;
+	  int maxIndex = std::distance ( cor_data.begin(), std::max_element ( cor_data.begin(), cor_data.end() ) );
+	  int FastIntegrate = maxIndex + 80;
+	  // std::cout << "max index = " << maxIndex << ", Fast integrate = " << FastIntegrate << std::endl;
+	  // // ------------------------------------ ADCTotal & Ratio	  
+	  for ( int ii=0; ii<cor_data.size (); ii++ ) {
+	    //------------------------ Mizukoshi method
+	    if ( ii < IntegEnd ) {
+	      ADCTotal += cor_data[ii];
+	      if ( ii < FastIntegrate  ) {
+	      	ADCTotalFast += cor_data[ii];
+	      }
+	    }
+	  }
+	  Ratio = float ( ADCTotalFast ) / float ( ADCTotal );
+	  // std::cout << "   L " << ADCTotal << ", " << ADCTotalFast << ", " << Ratio << std::endl;
+	  // if (  0 < Ratio && Ratio < 1.0  ) continue;
+
+	  // ------------------------------------ Cut
+	  int ADCCut = 0;
+	  if (  0 > Ratio  ) continue;
+	  if (  1 < Ratio  ) continue;
+	  if (  ADCCut > ADCTotal  ) continue;
+	  EnergyRatioH2D -> Fill ( float(ADCTotal)/1000, Ratio );
+	  EventIDRatioH2D -> Fill ( eventID, Ratio );
+	  EventIDADCTotalH2D -> Fill ( eventID, float(ADCTotal)/1000 );
+  
 	  // ------------------------------------ graph check
 	  if (grCnt < grNum ){
 	    checkGr [grCnt] = new TGraph ();
-	    for ( int ii=0; ii<data.size (); ii++ ) {
-	      // std::cout << ii << ", " << data[ii] << std::endl;
+	    for ( int ii=0; ii<cor_data.size (); ii++ ) {
+	      // std::cout << ii << ", " << cor_data[ii] << std::endl;
 	      nPt = checkGr [grCnt] -> GetN ();
-	      checkGr [grCnt] -> SetPoint ( nPt, ii, data[ii] );
+	      checkGr [grCnt] -> SetPoint ( nPt, ii, cor_data[ii] );
 	    }
 	    grCnt ++;
 	  }
@@ -179,17 +222,27 @@ void RawAnalysis(std::string filePath, int fileSize ) {
       lineCnt ++;    
     }
   
-  TCanvas *c = new TCanvas ( "c", "", 1000, 600 );
   gStyle -> SetOptStat ( 0 );
-  TH2D *frame = new TH2D ( "frame", "", 1, 0, 1024, 1, 2500, 3750 );
+  gStyle -> SetPadGridX ( 1 );
+  gStyle -> SetPadGridY ( 1 );
+  
+  TCanvas *c = new TCanvas ( "c", "", 1000, 600 );
+  TH2D *frame = new TH2D ( "frame", "", 1, 0, 1024, 1, -10, 1500 );
   frame -> SetXTitle ( "time [point]" );
   frame -> SetYTitle ( "ADC [counts]" );
   frame -> Draw ();  
-  for ( int ii=0; ii<grNum; ii++ ) {
+  for ( int ii=0; ii<grCnt; ii++ ) {
     checkGr[ii] -> Draw ("L Same");
   }
+  // TGraph * grLine = new TGraph ();
+  // grLine -> SetPoint ( 0, 0, 0 );
+  // grLine -> SetPoint ( 1, 1024, 0  );
+  // grLine -> SetLineColor ( 2 );
+  // grLine -> Draw ( "L Same" );
   c -> Print ( "./imgs/test.png" );
 
+  gStyle -> SetPadGridX ( 0 );
+  gStyle -> SetPadGridY ( 0 );
   TCanvas *c2 = new TCanvas ( "c2", "", 1000, 600 );
   TH2D *frame2 = new TH2D ( "frame2", "", 1, 0, fileSize, 1, 3680, 3720 );
   frame2 -> SetXTitle ( "event ID" );
@@ -212,6 +265,40 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   pedeH2D -> SetYTitle ( "pedestal [counts]" );
   pedeH2D -> Draw ( "COLZ" );
   c4 -> Print ( "./imgs/pedeH2D.png" );
+  
+  TCanvas *c5 = new TCanvas ( "c5", "", 1000, 800 );
+  EnergyRatioH2D -> SetXTitle ( "ADCTotal #times 10^{3} [counts]" );
+  EnergyRatioH2D -> SetYTitle ( "Ratio" );
+  EnergyRatioH2D -> Draw ( "COLZ" );
+  c5 -> Print ( "./imgs/Energy_vs_Ratio.png" );
+
+  gStyle -> SetPadGridX ( 1 );
+  gStyle -> SetPadGridY ( 1 );
+  TCanvas *c6 = new TCanvas ( "c6", "", 1000, 800 );
+  EventIDRatioH2D -> SetXTitle ( "event ID" );
+  EventIDRatioH2D -> SetYTitle ( "Ratio" );
+  EventIDRatioH2D -> Draw ( "COLZ" );
+  c6 -> Print ( "./imgs/EventIDRatioH2D_1.png" );
+  TProfile * pf6 = EventIDRatioH2D -> ProfileX ();
+  pf6 -> SetMarkerStyle ( 22 );
+  pf6 -> SetMarkerSize ( 1 );
+  pf6 -> SetMarkerColor ( 2 );
+  pf6 -> SetLineColor ( 2 );
+  pf6 -> Draw ( "AP Same" );
+  c6 -> Print ( "./imgs/EventIDRatioH2D_2.png" );
+  
+  TCanvas *c7 = new TCanvas ( "c7", "", 1000, 800 );
+  EventIDADCTotalH2D -> SetXTitle ( "event ID" );
+  EventIDADCTotalH2D -> SetYTitle ( "ADCTotal #times 10^{3} [counts]" );
+  EventIDADCTotalH2D -> Draw ( "COLZ" );
+  c7 -> Print ( "./imgs/EventIDADCTotalH2D_1.png" );
+  TProfile * pf7 = EventIDADCTotalH2D -> ProfileX ();
+  pf7 -> SetMarkerStyle ( 22 );
+  pf7 -> SetMarkerSize ( 1 );
+  pf7 -> SetMarkerColor ( 2 );
+  pf7 -> SetLineColor ( 2 );
+  pf7 -> Draw ( "AP Same" );
+  c7 -> Print ( "./imgs/EventIDADCTotalH2D_2.png" );
 
   std::cout << std::endl << " ====================================================================== done!" << std::endl << std::endl;
   
