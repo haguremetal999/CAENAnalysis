@@ -43,7 +43,8 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   unsigned long int clockTimePrev = 0;
   unsigned long int clockTimeMax = 10000;  
   int channel = 0;
-
+  int timeWindow = 1024;
+  
   int grNum = 1;
   if ( grNum > fileSize ) grNum = fileSize;
   int grCnt = 0;
@@ -62,7 +63,12 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   TH2D * EnergyAfterH2D = new TH2D ( "EnergyAfterH2D","", 1000, 0, 60, 100, 0, 10 );  
   TH2D * EventIDRatioH2D = new TH2D ( "EventIDRatioH2D","", 1000, 0, fileSize, 100, 0, 1 );
   TH2D * EventIDADCTotalH2D = new TH2D ( "EventIDADCTotalH2D","", 1000, 0, fileSize, 200, 0, 1 );
-  TH2D * EnergyFallingH2D = new TH2D ( "EnergyFallingH2D","", 1000, 0, 60, 80, 0, 80 );  
+  TH2D * EnergyFallingH2D = new TH2D ( "EnergyFallingH2D","", 1000, 0, 60, 75, 150, 300 );
+  TH2D * EnergyRisingH2D = new TH2D ( "EnergyRisingH2D","", 1000, 0, 60, 200, 0, 200 );
+  TH2D * EnergyTOTH2D = new TH2D ( "EnergyTOTH2D","", 1000, 0, 60, 100, 0, 300 );
+  TH2D * EnergyPeakH2D = new TH2D ( "EnergyPeak","", 1000, 0, 60, 50, 150, 200 );
+  //  TH2D * EnergyIncreaseH2D = new TH2D ( "EnergyIncrease","", 1000, 0, 60, 100, 0, 1 );
+  TH2D * EnergyIncreaseH2D = new TH2D ( "EnergyIncrease","", 1000, 0, 60, 100, 0, 20 );  
   
   int FastCnt = 80;    
   float avePulse1[1024], avePulse2[1024];
@@ -151,17 +157,18 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  }
 
 	  // -------------------------------------------------------------------- data check
-	  int pedestalAve = 0;
+	  float pedestalAve = 0;
+	  int pedeCalc = 150;
 	  for ( int ii=0; ii<data.size (); ii++ ) {
 	    // std::cout << ii << ", " << data[ii] << std::endl;
 	    // ------------------------------------ pedestal average (1)
-	    if ( ii<150 ){
+	    if ( ii<pedeCalc ){
 	      pedestalAve += data[ii];
 	      pedeH1D -> Fill ( data [ii] );
 	      pedeH2D -> Fill ( eventID, data [ii] );	      
 	      }
 	  }
-	  pedestalAve /= 150;
+	  pedestalAve /= pedeCalc;
 	  int pedeCnt = 0;
 	  float sigma = 1.375;
 	  float pedestalAve2 = 0;
@@ -169,8 +176,8 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  for ( int ii=0; ii<data.size (); ii++ ) {
 	    // std::cout << ii << ", " << data[ii] << std::endl;
 	    // ------------------------------------ pedestal average (2)
-	    if ( ii<150 ){
-	      if ( abs(data[ii]-pedestalAve) < 5*sigma ) {
+	    if ( ii<pedeCalc ){
+	      if ( abs(data[ii]-pedestalAve) < 3*sigma ) {
 		pedestalAve2 += data[ii];
 		pedeCnt ++;
 	      }
@@ -180,26 +187,39 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  pedestalAve2 /= pedeCnt;
 	  int nPt = pedestalGr -> GetN ();
 	  // std::cout << eventID << ", " << pedestalAve << std::endl;
-	  pedestalGr -> SetPoint ( nPt, eventID, pedestalAve2 );
-
+	  // pedestalGr -> SetPoint ( nPt, eventID, pedestalAve2 );
+	  timeWindow = cor_data.size();
+	  
 	  int ADCTotal = 0;
+	  int ADCTotalIncrease = 0;
 	  int ADCTotalFast = 0;
 	  int ADCTotalFast2 = 0;
+	  int ADCTotal3 = 0;
+	  int ADCFast3 = 0;
 	  int ADCTotalSlow = 0;
 	  int ADCAfter = 0;
+	  int increase = 0;
 	  float Ratio;
 	  float Ratio2;
-	  float Ratio3;
+	  float Ratio3;	  
+	  float RatioIncrease;
 	  int IntegEnd = cor_data.size ();
-	  IntegEnd = 450;
+	  int IntegEnd2 = cor_data.size ();
+	  IntegEnd = 800;
+	  IntegEnd2 = 800;
 	  int maxIndex = std::distance ( cor_data.begin(), std::max_element ( cor_data.begin(), cor_data.end() ) );
 	  int maxValue = *std::max_element ( cor_data.begin(), cor_data.end () );
 	  int FastIntegrate = maxIndex + 80;
-	  int FastIntegrate2 = maxIndex + 10;
+	  int FastIntegrate2 = maxIndex + 80;
 	  int SlowInteg = maxIndex + 80;
-	  float fallingRatio = 0.5;
+	  float fallingRatio = 0.2;
+	  float risingRatio = 0.2;
 	  int fallingCnt = 0;
+	  int risingCnt = 0;
+	  int TOTCnt = 0;
 	  bool fallingFlag = true;
+	  bool risingFlag = true;
+
 	  // std::cout << "max index = " << maxIndex << ", Fast integrate = " << FastIntegrate << std::endl;
 	  // // ------------------------------------ ADCTotal & Ratio	  
 	  for ( int ii=0; ii<cor_data.size (); ii++ ) {
@@ -218,21 +238,36 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	    }
 	    if ( IntegEnd < ii ) {
 		ADCAfter += cor_data[ii];
-	      }	      
+	    }
+	    if ( risingFlag && ii<maxIndex && cor_data[ii] > maxValue*risingRatio ) {
+	      risingCnt = ii;
+	      risingFlag = false;
+	    }
 	    if ( fallingFlag && ii>maxIndex && cor_data[ii] < maxValue*fallingRatio ) {
-	      fallingCnt = ii - maxIndex;
-	      // std::cout << "maxIndex, maxValue, " << maxIndex << ", " << maxValue << " | falling ii = " << ii << ", valule = " << cor_data[ii]  << ", fallingCnt = " << fallingCnt << std::endl;
+	      fallingCnt = ii;
+	      TOTCnt = fallingCnt - risingCnt;
 	      fallingFlag = false;
+	    }
+	    if ( risingFlag==false && fallingFlag==true ) {
+	      ADCTotal3 += cor_data[ii];
+	      if ( ii < FastIntegrate  ) {
+	    	ADCFast3 += cor_data[ii];
+	      }
+	    }
+	    if ( IntegEnd < ii && ii < IntegEnd2 ) {
+	      increase += cor_data[ii];
 	    }
 	  }
 	  Ratio = float ( ADCTotalFast ) / float ( ADCTotal );
 	  Ratio2 = float ( ADCTotalFast2 ) / float ( ADCTotal );
 	  Ratio3 = float ( ADCTotalSlow ) / float ( ADCTotal );
+	  RatioIncrease = float ( increase ) / float ( ADCTotal );
+	  float RatioThreshold = float ( ADCFast3) / float (ADCTotal3);
 	  // std::cout << "   L " << ADCTotal << ", " << ADCTotalFast << ", " << Ratio << std::endl;
 	  // if (  0 < Ratio && Ratio < 1.0  ) continue;
 
 	  // ------------------------------------ Cut
-	  int ADCCut = 2000;
+	  int ADCCut = 10000;
 	  int ADCRegion1_1 = 17500;
 	  int ADCRegion1_2 = 18500;
 	  int ADCRegion2_1 = 14000;
@@ -244,14 +279,25 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  if (  0 > Ratio  ) continue;
 	  if (  1 < Ratio  ) continue;
 	  if (  ADCCut > ADCTotal  ) continue;
-	  //	  if (  maxValue > 250  ) continue;
-	  EnergyRatioH2D -> Fill ( float(ADCTotal)/1000, Ratio );
+	  if (  risingCnt < 100  ) continue;
+	  if (  risingCnt < 150  ) continue;
+	  if (  maxValue > 200  ) continue;
+	  if (  Ratio > 0.65  ) continue;
+	  //	  if (  pedestalAve < 3702.78+float(eventID)*1.79609e-5  ) continue;
+	  
+	  EnergyRatioH2D -> Fill( float(ADCTotal)/1000, Ratio );
 	  EnergyRatioH2D3 -> Fill ( float(ADCTotal)/1000, Ratio3 );
 	  EnergyAfterH2D -> Fill ( float(ADCTotal)/1000, float(ADCAfter)/1000 );
 	  EventIDRatioH2D -> Fill ( eventID, Ratio );
 	  EventIDADCTotalH2D -> Fill ( eventID, float(ADCTotal)/1000 );
 	  EnergyFallingH2D -> Fill ( float(ADCTotal)/1000, fallingCnt );
+	  EnergyRisingH2D -> Fill ( float(ADCTotal)/1000, risingCnt );
+	  EnergyTOTH2D -> Fill ( float(ADCTotal)/1000, TOTCnt );
 	  peakPosH1D -> Fill ( maxIndex );
+	  EnergyPeakH2D -> Fill ( float(ADCTotal)/1000, maxIndex );
+	  EnergyIncreaseH2D -> Fill ( float(ADCTotal)/1000, float(increase)/1000 );
+	  // EnergyIncreaseH2D -> Fill ( float(ADCTotal)/1000, RatioIncrease );
+	  pedestalGr -> SetPoint ( nPt, eventID, pedestalAve2 );
 	  
 	  if ( ADCRegion1_1 < ADCTotal && ADCTotal < ADCRegion1_2 && RatioRegion1_1 < Ratio  && Ratio < RatioRegion1_2 ) {	  
 	    peakPosH1D2 -> Fill ( FastIntegrate  );
@@ -266,19 +312,23 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  
 	  if (grCnt < grNum ){
 	    //	    if ( 8000 < ADCTotal && ADCTotal < 10000 && Ratio < 0.6 ) {
-	    if ( ADCRegion1_1 < ADCTotal && ADCTotal < ADCRegion1_2 && RatioRegion1_1 < Ratio  && Ratio < RatioRegion1_2 ) {
+	    //if ( ADCRegion1_1 < ADCTotal && ADCTotal < ADCRegion1_2 && RatioRegion1_1 < Ratio  && Ratio < RatioRegion1_2 ) {
+	    if ( 1 ) {
 	      checkGr [grCnt] = new TGraph ();
 	      for ( int ii=0; ii<cor_data.size (); ii++ ) {
-	  	// std::cout << ii << ", " << cor_data[ii] << std::endl;
-	  	nPt = checkGr [grCnt] -> GetN ();
-	  	checkGr [grCnt] -> SetPoint ( nPt, ii*4, float ( cor_data[ii] ) / float ( 1 ) );
+		// if ( risingCnt < ii && ii < fallingCnt ) {
+		if ( 1 ) {
+		  nPt = checkGr [grCnt] -> GetN ();
+		  checkGr [grCnt] -> SetPoint ( nPt, ii*4, float ( cor_data[ii] ) / float ( 1 ) );
+		}
 	      }
 	      grCnt ++;
 	    }
 	  }
 	  if (grCnt2 < grNum ){
 	    // if ( 4000 < ADCTotal && ADCTotal < 6000 && 0.7 < Ratio && Ratio < 0.8 ) {
-	    if ( ADCRegion2_1 < ADCTotal && ADCTotal < ADCRegion2_2 && RatioRegion2_1 < Ratio && Ratio < RatioRegion2_2 ) {
+	    // if ( ADCRegion2_1 < ADCTotal && ADCTotal < ADCRegion2_2 && RatioRegion2_1 < Ratio && Ratio < RatioRegion2_2 ) {
+	    if (1) {
 	      checkGr2 [grCnt2] = new TGraph ();
 	      for ( int ii=0; ii<cor_data.size (); ii++ ) {
 	  	// std::cout << ii << ", " << cor_data[ii] << std::endl;
@@ -301,7 +351,7 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   // gStyle -> SetPadGridY ( 1 );
   
   TCanvas *c = new TCanvas ( "c", "", 1000, 600 );
-  TH2D *frame = new TH2D ( "frame", "", 1, 0, 1024*4, 1, -10, 200 );
+  TH2D *frame = new TH2D ( "frame", "", 1, 0, timeWindow*4, 1, -10, 200 );
   frame -> SetXTitle ( "time [ns]" );
   frame -> SetYTitle ( "ADC [counts]" );
   frame -> Draw ();  
@@ -334,12 +384,13 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   grLine2 -> SetLineStyle ( 2 );
   grLine2 -> Draw ( "L Same" );
   
-  // TGraph * grLine3 = new TGraph ();
-  // grLine3 -> SetPoint ( 0, 169+50, -100 );
-  // grLine3 -> SetPoint ( 1, 169+50, 1500 );
-  // grLine3 -> SetLineColor ( 1 );
-  // grLine3 -> SetLineStyle ( 2 );
-  // grLine3 -> Draw ( "L Same" );
+  TGraph * grLine3 = new TGraph ();
+  grLine3 -> SetPoint ( 0, 800*4, -100 );
+  grLine3 -> SetPoint ( 1, 800*4, 1500 );
+  grLine3 -> SetLineColor ( 1 );
+  grLine3 -> SetLineStyle ( 2 );
+  grLine3 -> Draw ( "L Same" );
+
   c -> Print ( "./imgs/test.png" );
   
   gStyle -> SetPadGridX ( 0 );
@@ -349,7 +400,8 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   frame2 -> SetXTitle ( "event ID" );
   frame2 -> SetYTitle ( "pedestal average [counts]" );
   frame2 -> Draw ();  
-  pedestalGr -> Draw ("L Same");
+  pedestalGr -> Fit ("pol1");
+  pedestalGr -> Draw ("L Same");  
   c2 -> Print ( "./imgs/pedestal.png" );
   
   TCanvas *c3 = new TCanvas ( "c3", "", 1000, 600 );
@@ -430,9 +482,34 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   // peakPosH1D -> Fit ( "gaus" );  
   peakPosH1D -> Draw ();
   peakPosH1D2 -> Draw ( "Same" );
-  peakPosH1D3 -> Draw ( "Same" );
+  peakPosH1D3 -> Draw ( "Same" );  
+  c9 -> Print ( "./imgs/peakPosH1D.png" );  
   
-  c9 -> Print ( "./imgs/peakPosH1D.png" );
+  TCanvas *c10 = new TCanvas ( "c10", "", 1000, 800 );
+  EnergyRisingH2D -> SetXTitle ( "ADCTotal #times 10^{3} [counts]" );
+  EnergyRisingH2D -> SetYTitle ( "rising Cnt [sampling]" );
+  EnergyRisingH2D -> Draw ( "COLZ" );
+  c10 -> Print ( "./imgs/EnergyRising2D.png" );
+  
+  TCanvas *c11 = new TCanvas ( "c11", "", 1000, 800 );
+  EnergyTOTH2D -> SetXTitle ( "ADCTotal #times 10^{3} [counts]" );
+  EnergyTOTH2D -> SetYTitle ( "TOT Cnt [sampling]" );
+  EnergyTOTH2D -> Draw ( "COLZ" );
+  c11 -> Print ( "./imgs/EnergyTOTH2D.png" );
+
+  TCanvas *c12 = new TCanvas ( "c12", "", 1000, 800 );
+  EnergyPeakH2D -> SetXTitle ( "ADCTotal #times 10^{3} [counts]" );
+  EnergyPeakH2D -> SetYTitle ( "Peak Cnt [sampling]" );
+  EnergyPeakH2D -> Draw ( "COLZ" );
+  c12 -> Print ( "./imgs/EnergyPeakH2D.png" );
+
+  
+  TCanvas *c13 = new TCanvas ( "c13", "", 1000, 800 );
+  EnergyIncreaseH2D -> SetXTitle ( "ADCTotal #times 10^{3} [counts]" );
+  // EnergyIncreaseH2D -> SetYTitle ( "Increasing Count Ratio to ADCTotal" );
+  EnergyIncreaseH2D -> SetYTitle ( "Increasing Count [counts]" );
+  EnergyIncreaseH2D -> Draw ( "COLZ" );
+  c13 -> Print ( "./imgs/EnergyIncreaseH2D.png" );
 
   
   std::cout << std::endl << " ====================================================================== done!" << std::endl << std::endl;
