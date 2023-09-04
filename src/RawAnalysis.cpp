@@ -45,7 +45,7 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   int channel = 0;
   int timeWindow = 1024;
   
-  int grNum = 1;
+  int grNum = 150;
   if ( grNum > fileSize ) grNum = fileSize;
   int grCnt = 0;
   int grCnt2 = 0;
@@ -158,7 +158,7 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 
 	  // -------------------------------------------------------------------- data check
 	  float pedestalAve = 0;
-	  int pedeCalc = 150;
+	  int pedeCalc = 1000;
 	  for ( int ii=0; ii<data.size (); ii++ ) {
 	    // std::cout << ii << ", " << data[ii] << std::endl;
 	    // ------------------------------------ pedestal average (1)
@@ -205,13 +205,13 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  float RatioIncrease;
 	  int IntegEnd = cor_data.size ();
 	  int IntegEnd2 = cor_data.size ();
-	  IntegEnd = 800;
-	  IntegEnd2 = 800;
+	  IntegEnd = 500;
+	  IntegEnd2 = 500;
 	  int maxIndex = std::distance ( cor_data.begin(), std::max_element ( cor_data.begin(), cor_data.end() ) );
 	  int maxValue = *std::max_element ( cor_data.begin(), cor_data.end () );
-	  int FastIntegrate = maxIndex + 80;
-	  int FastIntegrate2 = maxIndex + 80;
-	  int SlowInteg = maxIndex + 80;
+	  int FastIntegrate = maxIndex + 10;
+	  int FastIntegrate2 = maxIndex + 10;
+	  int SlowInteg = maxIndex + 10;
 	  float fallingRatio = 0.2;
 	  float risingRatio = 0.2;
 	  int fallingCnt = 0;
@@ -268,21 +268,21 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 
 	  // ------------------------------------ Cut
 	  int ADCCut = 10000;
-	  int ADCRegion1_1 = 17500;
-	  int ADCRegion1_2 = 18500;
-	  int ADCRegion2_1 = 14000;
-	  int ADCRegion2_2 = 15500;
-	  float RatioRegion1_1 = 0.5;
-	  float RatioRegion1_2 = 0.58;
-	  float RatioRegion2_1 = 0.7;
-	  float RatioRegion2_2 = 0.8;
-	  if (  0 > Ratio  ) continue;
-	  if (  1 < Ratio  ) continue;
-	  if (  ADCCut > ADCTotal  ) continue;
-	  if (  risingCnt < 100  ) continue;
-	  if (  risingCnt < 150  ) continue;
-	  if (  maxValue > 200  ) continue;
-	  if (  Ratio > 0.65  ) continue;
+	  int ADCRegion1_1 = 10000;
+	  int ADCRegion1_2 = 20000;
+	  int ADCRegion2_1 = 50000;
+	  int ADCRegion2_2 = 60000;
+	  float RatioRegion1_1 = 0.4;
+	  float RatioRegion1_2 = 0.55;
+	  float RatioRegion2_1 = 0.0;
+	  float RatioRegion2_2 = 1.0;
+	  // if (  0 > Ratio  ) continue;
+	  // if (  1 < Ratio  ) continue;
+	  // if (  ADCCut > ADCTotal  ) continue;
+	  // if (  risingCnt < 100  ) continue;
+	  // if (  risingCnt < 150  ) continue;
+	  // if (  maxValue < 800  ) continue;
+	  if (  ADCTotal < 10000  ) continue;
 	  //	  if (  pedestalAve < 3702.78+float(eventID)*1.79609e-5  ) continue;
 	  
 	  EnergyRatioH2D -> Fill( float(ADCTotal)/1000, Ratio );
@@ -312,8 +312,8 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  
 	  if (grCnt < grNum ){
 	    //	    if ( 8000 < ADCTotal && ADCTotal < 10000 && Ratio < 0.6 ) {
-	    //if ( ADCRegion1_1 < ADCTotal && ADCTotal < ADCRegion1_2 && RatioRegion1_1 < Ratio  && Ratio < RatioRegion1_2 ) {
-	    if ( 1 ) {
+	    if ( ADCRegion1_1 < ADCTotal && ADCTotal < ADCRegion1_2 && RatioRegion1_1 < Ratio  && Ratio < RatioRegion1_2 ) {
+	    // if ( 1 ) {
 	      checkGr [grCnt] = new TGraph ();
 	      for ( int ii=0; ii<cor_data.size (); ii++ ) {
 		// if ( risingCnt < ii && ii < fallingCnt ) {
@@ -327,18 +327,17 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  }
 	  if (grCnt2 < grNum ){
 	    // if ( 4000 < ADCTotal && ADCTotal < 6000 && 0.7 < Ratio && Ratio < 0.8 ) {
-	    // if ( ADCRegion2_1 < ADCTotal && ADCTotal < ADCRegion2_2 && RatioRegion2_1 < Ratio && Ratio < RatioRegion2_2 ) {
-	    if (1) {
+	    if ( ADCRegion2_1 < ADCTotal && ADCTotal < ADCRegion2_2 && RatioRegion2_1 < Ratio && Ratio < RatioRegion2_2 ) {
+	    // if (1) {
 	      checkGr2 [grCnt2] = new TGraph ();
 	      for ( int ii=0; ii<cor_data.size (); ii++ ) {
 	  	// std::cout << ii << ", " << cor_data[ii] << std::endl;
 	  	nPt = checkGr2 [grCnt2] -> GetN ();
-	  	checkGr2 [grCnt2] -> SetPoint ( nPt, ii, float ( cor_data[ii] ) / float ( 1 ) );
+	  	checkGr2 [grCnt2] -> SetPoint ( nPt, ii*4, float ( cor_data[ii] ) / float ( 1 ) );
 	      }
 	      grCnt2 ++;
 	    }
-	  }
-	    
+	  }	    
 	  headerFlag = false;
 	  dataFlag = false;
 	}
@@ -351,14 +350,16 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   // gStyle -> SetPadGridY ( 1 );
   
   TCanvas *c = new TCanvas ( "c", "", 1000, 600 );
-  TH2D *frame = new TH2D ( "frame", "", 1, 0, timeWindow*4, 1, -10, 200 );
+  TH2D *frame = new TH2D ( "frame", "", 1, 100*4, 1350*4, 1, -10, 1400 );
   frame -> SetXTitle ( "time [ns]" );
   frame -> SetYTitle ( "ADC [counts]" );
   frame -> Draw ();  
+
   for ( int ii=0; ii<grCnt; ii++ ) {
     checkGr[ii] -> SetLineColor ( 2 );
     checkGr[ii] -> Draw ("L Same");
   }
+
   // for ( int ii=0; ii<grCnt2; ii++ ) {
   //   checkGr2[ii] -> SetLineColor ( 4 );
   //   checkGr2[ii] -> Draw ("L Same");
@@ -370,26 +371,26 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   //  led1 -> AddEntry ( checkGr2[0], "Region 2",  "l" );
   //  led1 -> Draw ();  
 
-  TGraph * grLine = new TGraph ();
-  grLine -> SetPoint ( 0, (169+80)*4, -100 );
-  grLine -> SetPoint ( 1, (169+80)*4, 1500 );
-  grLine -> SetLineColor ( 1 );
-  grLine -> SetLineStyle ( 2 );
-  grLine -> Draw ( "L Same" );
+  // TGraph * grLine = new TGraph ();
+  // grLine -> SetPoint ( 0, (169+80)*4, -100 );
+  // grLine -> SetPoint ( 1, (169+80)*4, 1500 );
+  // grLine -> SetLineColor ( 1 );
+  // grLine -> SetLineStyle ( 2 );
+  // grLine -> Draw ( "L Same" );
 
-  TGraph * grLine2 = new TGraph ();
-  grLine2 -> SetPoint ( 0, 500*4, -100 );
-  grLine2 -> SetPoint ( 1, 500*4, 1500 );
-  grLine2 -> SetLineColor ( 1 );
-  grLine2 -> SetLineStyle ( 2 );
-  grLine2 -> Draw ( "L Same" );
+  // TGraph * grLine2 = new TGraph ();
+  // grLine2 -> SetPoint ( 0, 500*4, -100 );
+  // grLine2 -> SetPoint ( 1, 500*4, 1500 );
+  // grLine2 -> SetLineColor ( 1 );
+  // grLine2 -> SetLineStyle ( 2 );
+  // grLine2 -> Draw ( "L Same" );
   
-  TGraph * grLine3 = new TGraph ();
-  grLine3 -> SetPoint ( 0, 800*4, -100 );
-  grLine3 -> SetPoint ( 1, 800*4, 1500 );
-  grLine3 -> SetLineColor ( 1 );
-  grLine3 -> SetLineStyle ( 2 );
-  grLine3 -> Draw ( "L Same" );
+  // TGraph * grLine3 = new TGraph ();
+  // grLine3 -> SetPoint ( 0, 800*4, -100 );
+  // grLine3 -> SetPoint ( 1, 800*4, 1500 );
+  // grLine3 -> SetLineColor ( 1 );
+  // grLine3 -> SetLineStyle ( 2 );
+  // grLine3 -> Draw ( "L Same" );
 
   c -> Print ( "./imgs/test.png" );
   
