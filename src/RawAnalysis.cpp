@@ -65,26 +65,61 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   TH2D * EventIDADCTotalH2D = new TH2D ( "EventIDADCTotalH2D","", 1000, 0, fileSize, 200, 0, 1 );
   TH2D * EnergyFallingH2D = new TH2D ( "EnergyFallingH2D","", 1000, 0, 60, 75, 150, 300 );
   TH2D * EnergyRisingH2D = new TH2D ( "EnergyRisingH2D","", 1000, 0, 60, 200, 0, 200 );
-  TH2D * EnergyTOTH2D = new TH2D ( "EnergyTOTH2D","", 1000, 0, 60, 100, 0, 300 );
+  TH2D * EnergyTOTH2D = new TH2D ( "EnergyTOTH2D","", 1000, 0, 60, 160, 0, 160 );
   TH2D * EnergyPeakH2D = new TH2D ( "EnergyPeak","", 1000, 0, 60, 50, 150, 200 );
   //  TH2D * EnergyIncreaseH2D = new TH2D ( "EnergyIncrease","", 1000, 0, 60, 100, 0, 1 );
   TH2D * EnergyIncreaseH2D = new TH2D ( "EnergyIncrease","", 1000, 0, 60, 100, 0, 20 );
 
   TH1D * ADCTotalSeparationH1D = new TH1D ( "ADCTotalSeparationH1D","", 100, 10, 25 );
-  TH1D * RatioSeparationH1D = new TH1D ( "RatioSeparationH1D","", 200, 0.2, 0.6 );
+  TH1D * RatioSeparationH1D = new TH1D ( "RatioSeparationH1D","", 200, 0.4, 0.85 );
   
   int FastCnt = 80;    
   float avePulse1[1024], avePulse2[1024];
 
-  float  Fit_ADCTotal1 = 10;
-  float  Fit_ADCTotal2 = 16;
-  float  Fit_ADCTotal3 = 17;
-  float  Fit_ADCTotal4 = 25;
+  // 300
+  // float  Fit_ADCTotal1 = 12.1;
+  // float  Fit_ADCTotal2 = 13.6;
+  // float  Fit_ADCTotal3 = 14.3;
+  // float  Fit_ADCTotal4 = 16.2;  
+  // 400
+  // float  Fit_ADCTotal1 = 14.3;
+  // float  Fit_ADCTotal2 = 15.9;
+  // float  Fit_ADCTotal3 = 16.9;
+  // float  Fit_ADCTotal4 = 18.9;
+  // 500
+  // float  Fit_ADCTotal1 = 15.1;
+  // float  Fit_ADCTotal2 = 16.8;
+  // float  Fit_ADCTotal3 = 18;
+  // float  Fit_ADCTotal4 = 20;
+  // 600
+  // float  Fit_ADCTotal1 = 15.6;
+  // float  Fit_ADCTotal2 = 17.55;
+  // float  Fit_ADCTotal3 = 18.6;
+  // float  Fit_ADCTotal4 = 20.8;
+  // 700
+  // float  Fit_ADCTotal1 = 15.8;
+  // float  Fit_ADCTotal2 = 17.7;
+  // float  Fit_ADCTotal3 = 19;
+  // float  Fit_ADCTotal4 = 21.1;
+  // 800
+  // float  Fit_ADCTotal1 = 16;
+  // float  Fit_ADCTotal2 = 17.9;
+  // float  Fit_ADCTotal3 = 19.4;
+  // float  Fit_ADCTotal4 = 21.4;
+  // 900
+  float  Fit_ADCTotal1 = 16.2;
+  float  Fit_ADCTotal2 = 18.2;
+  float  Fit_ADCTotal3 = 19.6;
+  float  Fit_ADCTotal4 = 21.5;
 
-  float  Fit_Ratio1 = 0.2;
-  float  Fit_Ratio2 = 0.38;
-  float  Fit_Ratio3 = 0.45;
-  float  Fit_Ratio4 = 0.6;  
+  int IntegEnd   = 500;
+  int IntegEnd2  = 500;
+
+  float  Fit_Ratio1 = 0.63;
+  float  Fit_Ratio2 = 0.72;
+  float  Fit_Ratio3 = 0.76;
+  float  Fit_Ratio4 = 0.85;  
+  float fillCut = 1.0;
   
   while ( getline ( ifs, line ) )
     {
@@ -239,15 +274,15 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  float Ratio2;
 	  float Ratio3;	  
 	  float RatioIncrease;
-	  int IntegEnd = cor_data.size ();
-	  int IntegEnd2 = cor_data.size ();
-	  IntegEnd = 600;
-	  IntegEnd2 = 600;
+	  // int IntegEnd = cor_data.size ();
+	  // int IntegEnd2 = cor_data.size ();
+	  // IntegEnd = 700;
+	  // IntegEnd2 = 700;
 	  int maxIndex = std::distance ( cor_data.begin(), std::max_element ( cor_data.begin(), cor_data.end() ) );
 	  int maxValue = *std::max_element ( cor_data.begin(), cor_data.end () );
-	  int FastIntegrate = maxIndex + 20;
-	  int FastIntegrate2 = maxIndex + 20;
-	  int SlowInteg = maxIndex + 20;
+	  int FastIntegrate = maxIndex + FastCnt;
+	  int FastIntegrate2 = maxIndex + FastCnt;
+	  int SlowInteg = maxIndex + FastCnt;
 	  float fallingRatio = 0.2;
 	  float risingRatio = 0.2;
 	  int fallingCnt = 0;
@@ -334,7 +369,7 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  EnergyIncreaseH2D -> Fill ( float(ADCTotal)/1000, float(increase)/1000 );
 	  // EnergyIncreaseH2D -> Fill ( float(ADCTotal)/1000, RatioIncrease );
 	  pedestalGr -> SetPoint ( nPt, eventID, pedestalAve );
-	  if ( 10000 < ADCTotal && Ratio  < 0.4 ) {
+	  if ( 10000 < ADCTotal && Ratio  < fillCut ) {
 	    ADCTotalSeparationH1D -> Fill ( float ( ADCTotal ) / 1000 );
 	  }
 	  RatioSeparationH1D -> Fill ( Ratio );	  
@@ -578,11 +613,11 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   c14 -> cd ( 2 );
   RatioSeparationH1D -> SetXTitle ( "Ratio" );
   RatioSeparationH1D -> SetYTitle ( "Events" );
-  TF1 * f_Ratio14_1 = new TF1 ( "f14_3", "gaus", Fit_Ratio1, Fit_Ratio2 );
+  TF1 * f_Ratio14_1 = new TF1 ( "f14_3", "gaus", Fit_Ratio1, Fit_Ratio4 );
   RatioSeparationH1D -> Fit ( f_Ratio14_1, "0", "", Fit_Ratio1, Fit_Ratio2 );
   float mu_Ratio14_1 = f_Ratio14_1 -> GetParameter ( 1 );
   float sigma_Ratio14_1 = f_Ratio14_1 -> GetParameter ( 2 );
-  TF1 * f_Ratio14_2 = new TF1 ( "f14_4", "gaus", Fit_Ratio3, Fit_Ratio4 );
+  TF1 * f_Ratio14_2 = new TF1 ( "f14_4", "gaus", Fit_Ratio1, Fit_Ratio4 );
   RatioSeparationH1D -> Fit ( f_Ratio14_2, "0", "", Fit_Ratio3, Fit_Ratio4 );
   float mu_Ratio14_2 = f_Ratio14_2 -> GetParameter ( 1 );
   float sigma_Ratio14_2 = f_Ratio14_2 -> GetParameter ( 2 );  
