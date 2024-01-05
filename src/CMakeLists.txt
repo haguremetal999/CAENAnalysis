@@ -15,6 +15,7 @@ add_library(
   SHARED
   ReadTxtData.cpp
   RawAnalysis.cpp
+  ShowHistgrams.cpp
   )
 
 target_include_directories(

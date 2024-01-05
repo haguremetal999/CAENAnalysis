@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <chrono>
+#include <ctime>
 #include "TApplication.h"
 #include "TCanvas.h"
 #include "TAxis.h"
@@ -23,6 +25,24 @@
 #include "TProfile.h"
 #include "TLegend.h"
 
+float convertADCtoEnergy ( float ADC ) {
+  float slope = 23.907;
+  float intercept = -286.62;
+  // slope = 75;
+  // intercept = 0;
+  float energy = ( ADC - intercept ) / slope;
+  return energy;
+}
+
+std::tm convertUnixTimeToTm(unsigned long int unixTime) {
+    // Unix時間をsystem_clockのtime_pointに変換
+    std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(static_cast<std::time_t>(unixTime));
+    // system_clock::time_pointをtm構造体に変換
+    std::time_t tt = std::chrono::system_clock::to_time_t(tp);
+    std::tm gmtm = *std::gmtime(&tt);
+    return gmtm;
+}
+
 void RawAnalysis(std::string filePath, int fileSize ) {  
   
   std::cout << "data : " << filePath << std::endl;
@@ -34,22 +54,36 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   bool headerFlag = false;
   bool dataFlag   = false;      
   unsigned long int eventID;
+  unsigned long int MaxeventID = 0;
   unsigned long int timeStamp;
   unsigned long int clockTime;
   unsigned long int timeStampGlobal = 0;
   unsigned long int timeStampPrev = 0;
+  unsigned long int timeStampGlobalPrev = 0;
   unsigned long int timeStampMax = 10000;
-  unsigned long int clockTimeGlobal = 0;
-  unsigned long int clockTimePrev = 0;
-  unsigned long int clockTimeMax = 10000;  
+  float timeStampGlobalDif = 0;  // ns
+  float cnt_rate = 0;
+  float sec_per_cnt = 8; //  [ ns/cnt]
+  long long int stampCheck = std::pow( 2 , 31 );
+  long long int stampCheck2 = std::pow( 2 , 32 ) - 1;
+  unsigned long int clockTimeStart;
+  unsigned long int clockTimePrev;
+  long long int timeStampDif = 0;
+  long long int dif_temp_max = 0;
+  // unsigned long int clockTimePassed;
   int channel = 0;
   int timeWindow = 8192;
   
-  int grNum = 1000;
+  int grNum = 100;
   if ( grNum > fileSize ) grNum = fileSize;
   int grCnt = 0;
   int grCnt2 = 0;
   TGraph * timeStampGr = new TGraph ();
+  TGraph * timeStampGr2 = new TGraph ();
+  TGraph * timeStampGr3 = new TGraph ();
+  TGraph * timeStampGr4 = new TGraph ();
+  TGraph * timeClockGr = new TGraph ();
+  TGraph * timeClockGr2 = new TGraph ();
   TGraph * checkGr [grNum];
   TGraph * checkGr2 [grNum];
   TGraph * pedestalGr = new TGraph ();
@@ -57,8 +91,9 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   TH1D * peakPosH1D =  new TH1D ( "peakPosH1D","",  50, 150, 300 );
   TH1D * peakPosH1D2 = new TH1D ( "peakPosH1D2","", 50, 150, 300 );
   TH1D * peakPosH1D3 = new TH1D ( "peakPosH1D3","", 50, 150, 300 );
+  TH1D * timeDifH1D = new TH1D ( "timeDifH1D","", 100, 0, 1 );
   TH2D * pedeH2D = new TH2D ( "pedeH2D","", 10000, 0, fileSize, 40, 3680, 3720 );
-  TH2D * EnergyRatioH2D = new TH2D ( "EnergyRatioH2D","", 1000, 0, 200, 100, 0, 1 );
+  TH2D * EnergyRatioH2D = new TH2D ( "EnergyRatioH2D","", 1000, 0, 100, 100, 0, 1 );
   TH2D * EnergyRatioH2D2 = new TH2D ( "EnergyRatioH2D2","", 1000, 0, 60, 100, 0, 1 );
   TH2D * EnergyRatioH2D3 = new TH2D ( "EnergyRatioH2D3","", 1000, 0, 60, 100, 0, 1 );
   TH2D * EnergyAfterH2D = new TH2D ( "EnergyAfterH2D","", 1000, 0, 60, 100, 0, 10 );  
@@ -75,10 +110,29 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   unsigned long int hist_max = 4e3;
   TH1D * maxValueH1D = new TH1D ( "maxValueH1D","", 100, hist_max*0., hist_max*1.05 );
   TH1D * spectrumH1D = new TH1D ( "spectrumH1D","", 1000, 0, 60000 );
-  
-  int FastCnt = 80;    
-  float avePulse1[1024], avePulse2[1024];
+  TH2D * afterAlphaH2D = new TH2D ( "afterAlphaH2D","", 50, 0, 2, 100, 0, 50 );
+  TH1D * beforeBetaH1D = new TH1D ( "beforeBetaH1D","", 100, 0, 4 );
+  TGraph * afterAlphaGr = new TGraph ();
+  TGraph * beforeBetaGr = new TGraph ();
 
+  int ADCTotal = 0;
+  float Ratio;  
+  int FastCnt = 80;    
+  float energyPrev = 0;
+  float ratioPrev = 0;
+  float energyCut1_lower= 1.22; // Alpha cut ( after quench )
+  float energyCut1_upper = 1.5;  // Alpha cut ( after quench )
+  float energyCut2_lower = 0.5;   // Beta cut
+  float energyCut2_upper = 3.52;  // Beta cut
+  energyCut1_lower= 1.0; // Alpha cut ( after quench )
+  energyCut1_upper = 1.6;  // Alpha cut ( after quench )
+  energyCut2_lower = 0.5;   // Beta cut
+  energyCut2_upper = 3.6;  // Beta cut
+  float BetaCut_lower = 0.54;
+  float BetaCut_upper = 0.66;
+  float AlphaCut_lower = 0.35;
+  float AlphaCut_upper = 0.53;
+  float timeDifCut = 1; // ms
   float  Fit_ADCTotal1 = 10;
   float  Fit_ADCTotal2 = 16;
   float  Fit_ADCTotal3 = 17;
@@ -88,6 +142,13 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   float  Fit_Ratio2 = 0.38;
   float  Fit_Ratio3 = 0.45;
   float  Fit_Ratio4 = 0.6;  
+
+  TFile * tupleFile = new TFile ( "./data/root_file/Ntuples.root", "RECREATE" );
+  TTree * tree = new TTree ( "tree", "tree" );
+  tree -> Branch ( "eventID", &eventID, "eventID/I" );
+  tree -> Branch ( "timeStampGlobalDif", &timeStampGlobalDif, "timeStampGlobalDif/F" );
+  // tree -> Branch ( "ADCTotal", &ADCTotal, "ADCTotal/I" );
+  // tree -> Branch ( "Ratio", &Ratio, "Ratio/F" );  
   
   while ( getline ( ifs, line ) )
     {
@@ -102,44 +163,88 @@ void RawAnalysis(std::string filePath, int fileSize ) {
       if ( line.find ( "<event" ) != std::string::npos ){
 	headerFlag = true;
 	float process =  float ( dataCnt ) / float ( lineSize );
-	if ( lineSize > 100 ){ if ( dataCnt%(lineSize/100)==0 ) std::cout << "================================== Header : " << dataCnt << " | " << process*100 << "% processed." << std::endl; }
+	if ( lineSize > 100 ){ if ( dataCnt%(lineSize/150)==0 ) std::cout << "================================== Header : " << dataCnt << " | " << process*100 << "% processed." << std::endl; }
   	while ( getline ( i_stream, str_buf, ' ' ) ) {	  
-	  // std::cout << "   L str = " << str_buf << " | " << counter  << std::endl;
+	  // std::cout << "   L ------------ str = " << str_buf << " | " << counter  << std::endl;
 	  int index = str_buf.find ( "=" );
 	  if ( index > 0 ) {
 	    std::string subStr = str_buf.substr( index + 1 );
 	    subStr.pop_back ();
 	    subStr.erase( subStr.begin () );
 	    if ( counter==1 ) {
-	      eventID = std::stoul ( subStr ) ;
-	      // std::cout << "   L " << eventID << std::endl;
+	      eventID = std::stoull ( subStr ) ;
+	      if ( eventID > MaxeventID ) MaxeventID = eventID;
+	      // std::cout << "   L event ID = " << eventID << std::endl;
 	    } else if ( counter==4 ) {
 	      timeStamp = std::stoul ( subStr );
-	      timeStampGlobal += timeStamp - timeStampPrev;
-	      // std::cout << "   L " << timeStamp << " - " << timeStampPrev << " = " <<timeStampGlobal << std::endl;
-	      if ( timeStamp - timeStampPrev < 0 ) {		
-	      	std::cout << timeStamp << " - " << timeStampPrev << " = " <<timeStampGlobal << std::endl;
-	      }
+	      // std::cout << "   L timeStamp = " << timeStamp << std::endl;	      
+	      timeStampDif =  timeStamp - timeStampPrev;	   
+	      if ( timeStampDif < 0) {
+		// std::cout << "dif = " << timeStampDif << std::endl;
+		if ( timeStamp >= stampCheck ) {
+		  timeStampDif = (stampCheck2 - timeStampPrev ) + (timeStamp - stampCheck );
+		}
+		if ( timeStamp < stampCheck ) {
+		  timeStampDif = timeStamp*2;
+		}
+	      } 
+	      timeStampGlobal += timeStampDif;
+	      if ( dif_temp_max < timeStampDif ) dif_temp_max = timeStampDif;
+	      // std::cout << "   L cnt, " << dataCnt << " | " << timeStamp << " - " << timeStampPrev << " = " << timeStampDif << std::endl;
 	      timeStampPrev = timeStamp;
-	    } else if ( counter==5 ) {
+	    } else if ( counter==5 ) {	      
 	      subStr.erase ( subStr.length()-2, subStr.length() );
 	      clockTime = std::stoul ( subStr );
-	      clockTimeGlobal += clockTime - clockTimePrev;
-	      // std::cout << "   L " << clockTime << " - " << clockTimePrev << " = " <<clockTimeGlobal << std::endl;
-	      if ( clockTime - clockTimePrev < 0 ) {
-	      	std::cout << "   L " << clockTime << " - " << clockTimePrev << " = " <<clockTimeGlobal << std::endl;
+	      if ( dataCnt == 0 ) {
+		clockTimeStart = clockTime;
+		std::tm result_first = convertUnixTimeToTm( clockTimeStart );
+		int fyear = result_first.tm_year + 1900;
+		int fmonth = result_first.tm_mon + 1;
+		int fday = result_first.tm_mday;
+		int fhour = result_first.tm_hour;
+		int fminutes = result_first.tm_min;
+		int fsecond = result_first.tm_sec;
 	      }
-	      clockTimePrev = clockTime;
+	      // std::cout << "   L clockTime = " << clockTime << std::endl;
 	    }
 	  }
   	  counter ++ ;	  
-	}
+	}	
+	
+	timeStampGr -> SetPoint ( timeStampGr->GetN(), eventID, timeStamp );
+	timeStampGr2 -> SetPoint ( timeStampGr2->GetN(), eventID, timeStampGlobal );
+	timeClockGr -> SetPoint ( timeStampGr->GetN(), eventID, clockTime );
+	// 年月日時を表示       
+	std::tm result = convertUnixTimeToTm( clockTime );	
+	int year = result.tm_year + 1900;
+	int month = result.tm_mon + 1;
+	int day = result.tm_mday;
+	int hour = result.tm_hour;
+	int minutes = result.tm_min;
+	int second = result.tm_sec;	  
+	int clockTimePassed = clockTime - clockTimeStart;
+	cnt_rate =  float ( clockTimePassed ) * 1e9 / float (timeStampGlobal ); // ns/cnt
+	// std::cout << std::endl << " ================= eventID / clockTimePassed / timeStampGlobal / timeStampDif / cnt_rate = " << std::endl
+	// 	  << eventID << " / " << clockTimePassed << " / " << timeStampGlobal << " / " << timeStampDif << " / " << cnt_rate << std::endl;
+	  
+	  // if ( dataCnt > 0 ) std::cout << "  L ======================================== eventID / clock time passed / time stamp : " << eventID << " / " << clockTimePassed << " sec / " << timeStampGlobal << " cnt / " <<  cnt_rate << " ns/cnt"  << std::endl;	
+	// std::cout << "   L年: " << year << std::endl;
+	// std::cout << "   L月: " << month << std::endl;
+	// std::cout << "   L日: " << day << std::endl;
+	// std::cout << "   L時: " << hour << std::endl;
+	// std::cout << "   L分: " << minutes << std::endl;
+	// std::cout << "   L秒: " << second << std::endl;
+	timeStampGr3 -> SetPoint ( timeStampGr3->GetN(), eventID, cnt_rate );
+	timeStampGr4 -> SetPoint ( timeStampGr4->GetN(), eventID, timeStampDif );
 	dataCnt ++;	
 	continue;
       }
-      timeStampGr -> SetPoint ( timeStampGr->GetN(), eventID, timeStamp );
-      // if ( dataCnt < 275500 ) continue;
-      
+
+      timeStampGlobalDif = float ( timeStampDif ) * sec_per_cnt; // ns
+      // std::cout << " =========================== dif = " << timeStampGlobalDif << "ns" << std::endl;
+      // timeDifH1D -> Fill ( timeStampGlobalDif / 1e6 ); // ms
+      timeStampGlobalPrev = timeStampGlobal;
+	
       counter = 0;
       std::vector<int> data;
       // // --------------------------------------------------- data
@@ -176,7 +281,7 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 
 	  // -------------------------------------------------------------------- data check
 	  float pedestalAve = 0;
-	  int pedeCalc = 1000;
+	  int pedeCalc = 950;
 	  int startCnt = 0;
 	  int risingIndex = 0;
 	  for ( int ii=0; ii<data.size (); ii++ ) {
@@ -197,7 +302,7 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 		break;
 	      }
 	    }
-	  }
+	  }	  
 	  pedestalAve /= ( pedeCalc - 6 );
 	  if ( pedestalAve > 0 ) {
 	    // std::cout << "============================================================================= eventID, pedestal ave = " << eventID << ", " << pedestalAve << std::endl; 
@@ -227,9 +332,8 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  int nPt = pedestalGr -> GetN ();
 	  // std::cout << eventID << ", " << pedestalAve << std::endl;
 	  // pedestalGr -> SetPoint ( nPt, eventID, pedestalAve2 );
-	  timeWindow = cor_data.size();
+	  timeWindow = cor_data.size();	  	  
 	  
-	  int ADCTotal = 0;
 	  int ADCTotalIncrease = 0;
 	  int ADCTotalFast = 0;
 	  int ADCTotalFast2 = 0;
@@ -238,7 +342,6 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  int ADCTotalSlow = 0;
 	  int ADCAfter = 0;
 	  int increase = 0;
-	  float Ratio;
 	  float Ratio2;
 	  float Ratio3;	  
 	  float RatioIncrease;
@@ -246,13 +349,14 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  int IntegEnd2 = cor_data.size ();
 	  int maxIndex = std::distance ( cor_data.begin(), std::max_element ( cor_data.begin(), cor_data.end() ) );	  
 	  int maxValue = *std::max_element ( cor_data.begin(), cor_data.end () );
-	  IntegEnd = 3400;
-	  IntegEnd2 = 3400;
-	  // std::cout << "max value = " << maxValue << std::endl;
-	  maxValueH1D -> Fill ( maxValue );
-	  int FastIntegrate = maxIndex + 20;
-	  int FastIntegrate2 = maxIndex + 20;
-	  int SlowInteg = maxIndex + 20;
+	  
+	  IntegEnd = 1800;
+	  IntegEnd2 = IntegEnd; 	  
+	  int FastIntegrate = 1290;
+	  FastIntegrate = 1205;	  	 
+	  
+	  int FastIntegrate2 = FastIntegrate;
+	  int SlowInteg = FastIntegrate;
 	  float fallingRatio = 0.2;
 	  float risingRatio = 0.2;
 	  int fallingCnt = 0;
@@ -260,7 +364,10 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  int TOTCnt = 0;
 	  bool fallingFlag = true;
 	  bool risingFlag = true;
+	  maxValueH1D -> Fill ( maxValue );
 
+	  ADCTotal = 0;
+	  Ratio = 0;
 	  // std::cout << "max index = " << maxIndex << ", Fast integrate = " << FastIntegrate << std::endl;
 	  // // ------------------------------------ ADCTotal & Ratio	  
 	  for ( int ii=0; ii<cor_data.size (); ii++ ) {
@@ -303,10 +410,48 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  Ratio2 = float ( ADCTotalFast2 ) / float ( ADCTotal );
 	  Ratio3 = float ( ADCTotalSlow ) / float ( ADCTotal );
 	  RatioIncrease = float ( increase ) / float ( ADCTotal );
-	  float RatioThreshold = float ( ADCFast3) / float (ADCTotal3);
-	  // std::cout << "   L " << ADCTotal << ", " << ADCTotalFast << ", " << Ratio << std::endl;
-	  // if (  0 < Ratio && Ratio < 1.0  ) continue;
+	  float RatioThreshold = float ( ADCFast3) / float (ADCTotal3);	  
+	  float energy = convertADCtoEnergy ( ADCTotal ) / 1000; // MeV
 
+	  if ( ADCTotal < 1000 ) continue;	  
+	  //======================================== sequential pulse analysis cut
+	  //--------------------------------- 3.272 MeV Beta from 214_Bi
+	  if ( energyCut2_lower < energyPrev && energyPrev < energyCut2_upper && BetaCut_lower < ratioPrev && ratioPrev < BetaCut_upper ) {
+	    ;
+	  } else {
+	    energyPrev = energy;
+	    ratioPrev = Ratio;
+	    continue;	     
+	  }	  
+	  // //--------------------------------- 1.364 MeV Alpha from 214_Po
+	  if ( energyCut1_lower < energy && energy < energyCut1_upper && AlphaCut_lower < Ratio && Ratio < AlphaCut_upper  ) { // 1.364 MeV Alpha
+	    // if ( AlphaCut_lower < Ratio && Ratio < AlphaCut_upper  ) { // 1.364 MeV Alpha
+	    ;
+	  } else {
+	    energyPrev = energy;
+	    ratioPrev = Ratio;
+	    continue;
+	  };
+	  //---------------------------------- less than 5ms
+	  if ( timeStampGlobalDif/1e6 > timeDifCut ) {  // ms
+	  // if ( timeStampGlobalDif/1e6 > 3 && timeStampGlobalDif/1e6 < 10 ) {  // ms
+	    energyPrev = energy;
+	    ratioPrev = Ratio;
+	    continue;
+	  }
+	  //======================================== sequential pulse analysis cut
+	  
+	  // std::cout << "----------------------- time_dif = " << timeStampGlobalDif/1e6 << " ms" << std::endl;
+	  // std::cout << "   L Energy prev = " << energyPrev << " MeV" << std::endl;
+	  // std::cout << "   L Ratio_prev  = " << ratioPrev << std::endl;
+	  // std::cout << "   L Energy = " << energy << " MeV" << std::endl;
+	  // std::cout << "   L Ratio  = " << Ratio << std::endl;
+	  // afterAlphaH2D -> Fill ( energy, timeStampGlobalDif/1e6 );
+	  afterAlphaGr -> SetPoint ( afterAlphaGr->GetN(), energy, timeStampGlobalDif/1e6 );
+	  beforeBetaH1D -> Fill ( energyPrev );
+	  timeDifH1D -> Fill ( timeStampGlobalDif / 1e6 ); // ms
+	  // std::cout << "   L energy, timeStampGlobalDif/1e6  = " << energy << ", " << timeStampGlobalDif/1e6 << std::endl;
+	  
 	  // ------------------------------------ Cut
 	  int ADCCut = 10000;
 	  int ADCRegion1_1 = 10000;
@@ -325,7 +470,7 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  // if (  maxValue < 200  ) continue;
 	  // if (  ADCTotal < 2000  ) continue;
 	  // if (  pedestalAve < 3702.78+float(eventID)*1.79609e-5  ) continue;
-	  
+
 	  EnergyRatioH2D -> Fill( float(ADCTotal)/1000, Ratio );
 	  EnergyRatioH2D3 -> Fill ( float(ADCTotal)/1000, Ratio3 );
 	  EnergyAfterH2D -> Fill ( float(ADCTotal)/1000, float(ADCAfter)/1000 );
@@ -357,49 +502,47 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  }
 	  
 	  if (grCnt < grNum ){
-	    //	    if ( 8000 < ADCTotal && ADCTotal < 10000 && Ratio < 0.6 ) {
-	    // if ( ADCRegion1_1 < ADCTotal && ADCTotal < ADCRegion1_2 && RatioRegion1_1 < Ratio  && Ratio < RatioRegion1_2 ) {
-	    if ( 1 ) {
-	      checkGr [grCnt] = new TGraph ();
-	      for ( int ii=0; ii<cor_data.size (); ii++ ) {
-		if ( 140 < float(ADCTotal)/1000 ) {
-		//if ( 1 ) {
-		  if ( risingIndex < ii ) {
-		    nPt = checkGr [grCnt] -> GetN ();
-		    checkGr [grCnt] -> SetPoint ( nPt, ii, float ( cor_data[ii] ) / float ( 1 ) );
-		    // std::cout << "start index = " << risingIndex << std::endl;
-		  }
-		}
-	      }
-	      grCnt ++;
+	    // std::cout << "--------------------------------------- grCnt = " << grCnt << std::endl;
+	    checkGr [grCnt] = new TGraph ();
+	    for ( int ii=0; ii<cor_data.size (); ii++ ) {
+	      nPt = checkGr [grCnt] -> GetN ();
+	      checkGr [grCnt] -> SetPoint ( nPt, ii, float ( cor_data[ii] ) / float ( 1 ) );
+	      // std::cout << "ii, data = " << ii << ", " << cor_data[ii] << std::endl;
 	    }
+	    grCnt ++;
 	  }
+	  
 	  if (grCnt2 < grNum ){
-	    // if ( 4000 < ADCTotal && ADCTotal < 6000 && 0.7 < Ratio && Ratio < 0.8 ) {
-	    // if ( ADCRegion2_1 < ADCTotal && ADCTotal < ADCRegion2_2 && RatioRegion2_1 < Ratio && Ratio < RatioRegion2_2 ) {
 	    if (1) {
 	      checkGr2 [grCnt2] = new TGraph ();
 	      for ( int ii=0; ii<cor_data.size (); ii++ ) {
-	  	// std::cout << ii << ", " << cor_data[ii] << std::endl;
-	  	nPt = checkGr2 [grCnt2] -> GetN ();
-	  	checkGr2 [grCnt2] -> SetPoint ( nPt, ii*4, float ( cor_data[ii] ) / float ( 1 ) );
+	  	checkGr2 [grCnt2] -> SetPoint ( checkGr2 [grCnt2] -> GetN (), ii*4, float ( cor_data[ii] ) / float ( 1 ) );
 	      }
 	      grCnt2 ++;
 	    }
-	  }	    
+	  }
+	  tree -> Fill ();
+	  energyPrev = energy;
+	  ratioPrev = Ratio;
 	  headerFlag = false;
 	  dataFlag = false;
 	}
       }      
       lineCnt ++;    
     }
+
+  tree -> Write ();
+  tupleFile -> Close ();
+
+  std::cout << "------------------------------------------------------ Max Event ID = " << MaxeventID << std::endl;
   
+  TFile * saveFile = new TFile ( "./data/savedHistgrams.root", "RECREATE" );  
   gStyle -> SetOptStat ( 0 );
   // gStyle -> SetPadGridX ( 1 );
   // gStyle -> SetPadGridY ( 1 );
   
   TCanvas *c = new TCanvas ( "c", "", 1000, 600 );
-  TH2D *frame = new TH2D ( "frame", "", 1, 0, timeWindow, 1, -10, 4000 );
+  TH2D *frame = new TH2D ( "frame", "", 1, 0, timeWindow, 1, -100, 4000 );
   frame -> SetXTitle ( "time [ns]" );
   frame -> SetYTitle ( "ADC [counts]" );
   frame -> Draw ();  
@@ -440,7 +583,6 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   // grLine3 -> SetLineColor ( 1 );
   // grLine3 -> SetLineStyle ( 2 );
   // grLine3 -> Draw ( "L Same" );
-
   c -> Print ( "./imgs/test.png" );
   
   gStyle -> SetPadGridX ( 0 );
@@ -602,12 +744,71 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   c14 -> Print ( "./imgs/Separation.png" );
 
   TCanvas *c15 = new TCanvas ( "c15", "", 1000, 600 );
-  TH2D *frame15 = new TH2D ( "frame15", "", 1, 0, fileSize, 1, 0, pow ( 2., 32) );
+  // TH2D *frame15 = new TH2D ( "frame15", "", 1, 0, fileSize, 1, 0, pow ( 2., 32) );
+  TH2D *frame15 = new TH2D ( "frame15", "", 1, 0, fileSize, 1, 0, timeStampGlobal );
   frame15 -> SetXTitle ( "event ID" );
   frame15 -> SetYTitle ( "time stamp" );
   frame15 -> Draw ();  
-  timeStampGr -> Draw ("L Same");  
+  timeStampGr -> Draw ("L Same");
+  timeStampGr2 -> SetMarkerSize ( 2 );
+  timeStampGr2 -> SetMarkerStyle ( 20 );
+  timeStampGr2 -> SetMarkerColor ( 2 );
+  timeStampGr2 -> SetLineColor ( kRed );  
+  timeStampGr2 -> Draw ("PL Same");
+  std::cout << std::endl << "========================================================== stamp global = " <<timeStampGlobal << std::endl;
   c15 -> Print ( "./imgs/timestamp.png" );
+
+
+  TCanvas *c15_2 = new TCanvas ( "c15_2", "", 1000, 600 );
+  TH2D *frame15_2 = new TH2D ( "frame15_2", "", 1, 0, fileSize, 1, 0, clockTime );
+  frame15_2 -> SetXTitle ( "event ID" );
+  frame15_2 -> SetYTitle ( "time clock" );
+  frame15_2 -> Draw ();
+  timeClockGr -> Draw ("L Same");
+  std::cout << std::endl << "========================================================== stamp global = " <<timeStampGlobal << std::endl;
+  c15_2 -> Print ( "./imgs/clockTime.png" );
+
+  TCanvas *c15_3 = new TCanvas ( "c15_3", "", 1000, 600 );
+  TH2D *frame15_3 = new TH2D ( "frame15_3", "", 1, 0, fileSize, 1, 0, 20 );
+  frame15_3 -> SetXTitle ( "event ID" );
+  frame15_3 -> SetYTitle ( "time/cnt [ns/cnt]" );
+  frame15_3 -> Draw ();
+  timeStampGr3 -> Draw ("L Same");
+  c15_3 -> Print ( "./imgs/cnt_rate.png" );
+
+  TCanvas *c15_4 = new TCanvas ( "c15_4", "", 1000, 600 );
+  timeDifH1D -> SetXTitle ( "time dif [ms]" );
+  timeDifH1D -> SetYTitle ( "Event" );
+  timeDifH1D -> Draw ();
+  TF1 *f15_4 = new TF1 ( "f15_4", "[0]*exp(-1*x/[1])" );
+  timeDifH1D -> Fit ( f15_4 );
+  c15_4 -> Print ( "./imgs/time_diff.png" );
+  timeDifH1D -> Write ();
+  
+  TCanvas *c15_5 = new TCanvas ( "c15_5", "", 1000, 600 );
+  TH2D *frame15_5 = new TH2D ( "frame15_5", "", 1, 0, fileSize, 1, 0, dif_temp_max );
+  frame15_5 -> SetXTitle ( "event ID" );
+  frame15_5 -> SetYTitle ( "time Stamp Dif [cnt]" );
+  frame15_5 -> Draw ();
+  timeStampGr4 -> Draw ("L Same");
+  c15_5 -> Print ( "./imgs/time_stamp_dif.png" );
+
+  gStyle -> SetPadGridX ( 0 );
+  gStyle -> SetPadGridY ( 0 );
+  TCanvas *c15_6 = new TCanvas ( "c15_6", "", 1000, 600 );
+  afterAlphaH2D -> SetXTitle ( "Energy [MeV]" );
+  afterAlphaH2D -> SetYTitle ( "Time Delay [ms]" );
+  afterAlphaH2D -> Draw ( "" );
+  afterAlphaGr -> SetMarkerSize ( 1 );
+  afterAlphaGr -> SetMarkerStyle ( 22 );
+  afterAlphaGr -> Draw ( "P Same" );
+  c15_6 -> Print ( "./imgs/after_alpha_h2d.png" );
+
+  TCanvas *c15_7 = new TCanvas ( "c15_7", "", 1000, 600 );
+  beforeBetaH1D -> SetXTitle ( "Energy [MeV]" );
+  beforeBetaH1D -> SetYTitle ( "Events" );
+  beforeBetaH1D -> Draw ();
+  c15_7 -> Print ( "./imgs/before_beta_h1d.png" );
   
   TCanvas *c16 = new TCanvas ( "c16", "", 1000, 600 );
   maxValueH1D -> SetXTitle ( "pulse height" );
@@ -629,14 +830,24 @@ void RawAnalysis(std::string filePath, int fileSize ) {
   f_ADCTotal17 -> Draw ( "Same" );
   c17 -> Print ( "./imgs/spectrumH1D.png" );
 
+  saveFile -> Close ();
   
   std::cout << std::endl << std::endl << "==================================================" << std::endl
     // << "ADCTotal_border1, ADCTotal_border2 = " << ADCTotal_border1 << ", " << ADCTotal_border2 << std::endl
 	    << "separation ADCTotal = " << ADCTotal_separation << std::endl
     //	    << "Ratio_border1, Ratio_border2 = " << Ratio_border1 << ", " << Ratio_border2 << std::endl
 	    << "separation Ratio = " << Ratio_separation << std::endl
-	    << "==================================================" << std::endl <<std::endl;
-    
+	    << "==================================================" << std::endl <<std::endl;    
   std::cout << std::endl << " ====================================================================== done!" << std::endl << std::endl;
-  
+
+  // // 関数を呼び出してtm構造体を取得
+  // std::tm result = convertUnixTimeToTm( clockTime );
+  // // 年月日時を表示
+  // std::cout << "年: " << result.tm_year + 1900 << std::endl;
+  // std::cout << "月: " << result.tm_mon + 1 << std::endl;
+  // std::cout << "日: " << result.tm_mday << std::endl;
+  // std::cout << "時: " << result.tm_hour << std::endl;
+  // std::cout << "分: " << result.tm_min << std::endl;
+  // std::cout << "秒: " << result.tm_sec << std::endl;
+
 }

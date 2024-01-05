@@ -12,3 +12,8 @@ add_executable(Raw_Analysis raw_analysis.cpp)
 target_link_libraries(Raw_Analysis  decodeLibs)
 target_include_directories(Raw_Analysis PRIVATE ${ROOT_INCLUDE_DIRS})
 target_link_libraries(Raw_Analysis ${ROOT_LIBRARIES})
+
+add_executable(Show_Histgrams show_histgrams.cpp)
+target_link_libraries(Show_Histgrams  decodeLibs)
+target_include_directories(Show_Histgrams PRIVATE ${ROOT_INCLUDE_DIRS})
+target_link_libraries(Show_Histgrams ${ROOT_LIBRARIES})
