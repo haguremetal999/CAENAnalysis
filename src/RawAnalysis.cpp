@@ -413,33 +413,33 @@ void RawAnalysis(std::string filePath, int fileSize ) {
 	  float RatioThreshold = float ( ADCFast3) / float (ADCTotal3);	  
 	  float energy = convertADCtoEnergy ( ADCTotal ) / 1000; // MeV
 
-	  if ( ADCTotal < 1000 ) continue;	  
-	  //======================================== sequential pulse analysis cut
-	  //--------------------------------- 3.272 MeV Beta from 214_Bi
-	  if ( energyCut2_lower < energyPrev && energyPrev < energyCut2_upper && BetaCut_lower < ratioPrev && ratioPrev < BetaCut_upper ) {
-	    ;
-	  } else {
-	    energyPrev = energy;
-	    ratioPrev = Ratio;
-	    continue;	     
-	  }	  
-	  // //--------------------------------- 1.364 MeV Alpha from 214_Po
-	  if ( energyCut1_lower < energy && energy < energyCut1_upper && AlphaCut_lower < Ratio && Ratio < AlphaCut_upper  ) { // 1.364 MeV Alpha
-	    // if ( AlphaCut_lower < Ratio && Ratio < AlphaCut_upper  ) { // 1.364 MeV Alpha
-	    ;
-	  } else {
-	    energyPrev = energy;
-	    ratioPrev = Ratio;
-	    continue;
-	  };
-	  //---------------------------------- less than 5ms
-	  if ( timeStampGlobalDif/1e6 > timeDifCut ) {  // ms
-	  // if ( timeStampGlobalDif/1e6 > 3 && timeStampGlobalDif/1e6 < 10 ) {  // ms
-	    energyPrev = energy;
-	    ratioPrev = Ratio;
-	    continue;
-	  }
-	  //======================================== sequential pulse analysis cut
+	  // if ( ADCTotal < 1000 ) continue;	  
+	  // //======================================== sequential pulse analysis cut
+	  // //--------------------------------- 3.272 MeV Beta from 214_Bi
+	  // if ( energyCut2_lower < energyPrev && energyPrev < energyCut2_upper && BetaCut_lower < ratioPrev && ratioPrev < BetaCut_upper ) {
+	  //   ;
+	  // } else {
+	  //   energyPrev = energy;
+	  //   ratioPrev = Ratio;
+	  //   continue;	     
+	  // }	  
+	  // // //--------------------------------- 1.364 MeV Alpha from 214_Po
+	  // if ( energyCut1_lower < energy && energy < energyCut1_upper && AlphaCut_lower < Ratio && Ratio < AlphaCut_upper  ) { // 1.364 MeV Alpha
+	  //   // if ( AlphaCut_lower < Ratio && Ratio < AlphaCut_upper  ) { // 1.364 MeV Alpha
+	  //   ;
+	  // } else {
+	  //   energyPrev = energy;
+	  //   ratioPrev = Ratio;
+	  //   continue;
+	  // };
+	  // //---------------------------------- less than 5ms
+	  // if ( timeStampGlobalDif/1e6 > timeDifCut ) {  // ms
+	  // // if ( timeStampGlobalDif/1e6 > 3 && timeStampGlobalDif/1e6 < 10 ) {  // ms
+	  //   energyPrev = energy;
+	  //   ratioPrev = Ratio;
+	  //   continue;
+	  // }
+	  // //======================================== sequential pulse analysis cut
 	  
 	  // std::cout << "----------------------- time_dif = " << timeStampGlobalDif/1e6 << " ms" << std::endl;
 	  // std::cout << "   L Energy prev = " << energyPrev << " MeV" << std::endl;
